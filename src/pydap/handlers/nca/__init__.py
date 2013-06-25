@@ -1,3 +1,5 @@
+"""A Pydap handler for aggregating NetCDF files."""
+
 import os
 from glob import glob
 import re
@@ -18,30 +20,28 @@ from pydap.lib import fix_slice
 
 
 class FileAttributeCache(object):
-    """
-    Cache for storing and retrieving values tied to files which can change.
+
+    """Cache for storing and retrieving values tied to files which can change.
 
     This is used so we don't need to open NetCDF files for each request to get
     data from the aggregation axis.
 
     """
+
     def __init__(self):
         self.cache = {}
         self.mtime = {}
 
     def __setitem__(self, filepath, value):
-        """
-        Assign a value to the file `filepath`.
-
-        """
+        """Assign a value to the file `filepath`."""
         self.cache[filepath] = value
         self.mtime[filepath] = os.stat(filepath)[ST_MTIME]
 
     def __getitem__(self, filepath):
-        """
-        Try to retrieve the value associated with `filepath`.
+        """Try to retrieve the value associated with `filepath`.
 
-        This will fail if the file has been modified.
+        Return the cached valud or raise and exception if the file has been
+        modified.
 
         """
         if filepath not in self.cache:
@@ -56,13 +56,15 @@ class FileAttributeCache(object):
 
 
 class PseudoNetCDFVariable(object):
-    """
-    Create a pseudo NetCDF variable.
+
+    """Create a pseudo NetCDF variable.
 
     This is used to create the aggregation axis as if it were a variable in the
-    original NetCDF files. Basically we need just to return data and attributes.
+    original NetCDF files. Basically we need just to return data and
+    attributes.
 
     """
+
     def __init__(self, data, attributes):
         self.data = data
         self._attributes = attributes
@@ -73,6 +75,8 @@ class PseudoNetCDFVariable(object):
 
 class NetCDFAggregatorHandler(BaseHandler):
 
+    """A NetCDF 3 aggregator."""
+
     extensions = re.compile(r"^.*\.nca$", re.IGNORECASE)
 
     def __init__(self, filepath):
@@ -82,8 +86,10 @@ class NetCDFAggregatorHandler(BaseHandler):
         self.cache = FileAttributeCache()
 
     def parse(self, projection, selection):
-        """
+        """Build aggregrated dataset.
+
         Aggregation must be done per request, since new files may be added.
+        Once the dataset is built, we return a call to the superclass.
 
         """
         try:
@@ -98,10 +104,12 @@ class NetCDFAggregatorHandler(BaseHandler):
 
         # add last-modified header, taking the last modified file from the list
         mtime = max(os.stat(file)[ST_MTIME] for file in files)
-        self.additional_headers = [ (k, v) for (k, v) in self.additional_headers if
-                k != 'Last-modified' ]
+        self.additional_headers = [
+            (k, v) for (k, v) in self.additional_headers
+            if k != 'Last-modified']
         self.additional_headers.append(
-                ('Last-modified', (formatdate(time.mktime(time.localtime(mtime))))))
+            ('Last-modified', (
+                formatdate(time.mktime(time.localtime(mtime))))))
 
         # get a template
         template = netcdf_file(files[0])
@@ -114,8 +122,10 @@ class NetCDFAggregatorHandler(BaseHandler):
             # create a new axis
             values = config[axis]['values']
             data = parse_values(values, len(files))
-            attributes = { k:v for k, v in config[axis].items() if k != 'values' }
-            count = [ (file, 0) for file in files ]
+            attributes = {
+                k: v for k, v in config[axis].items() if k != 'values'
+            }
+            count = [(file, 0) for file in files]
         elif axis in dims:
             # aggregate along existing axis
             count = []
@@ -141,11 +151,8 @@ class NetCDFAggregatorHandler(BaseHandler):
 
         # build dataset
         name = os.path.split(self.filepath)[1]
-        self.dataset = DatasetType(name, attributes=dict(NC_GLOBAL=template._attributes))
-        for dim in dims:
-            if dims[dim] is None:
-                #self.dataset.attributes['DODS_EXTRA'] = {'Unlimited_Dimension': dim}
-                break
+        self.dataset = DatasetType(
+            name, attributes=dict(NC_GLOBAL=template._attributes))
 
         # add grids
         grids = [var for var in vars if var not in dims]
@@ -166,19 +173,19 @@ class NetCDFAggregatorHandler(BaseHandler):
             self.dataset[grid] = GridType(grid, vars[grid]._attributes)
 
             # add array
-            self.dataset[grid][grid] = BaseType(grid,
-                    AggregateNetcdfData(grid, index, count, dtype, shape),
-                    vars[grid].dimensions, vars[grid]._attributes)
+            self.dataset[grid][grid] = BaseType(
+                grid, AggregateNetcdfData(grid, index, count, dtype, shape),
+                vars[grid].dimensions, vars[grid]._attributes)
 
             # add maps
             for dim in vars[grid].dimensions:
-                self.dataset[grid][dim] = BaseType(dim, vars[dim][:],
-                        None, vars[dim]._attributes)
+                self.dataset[grid][dim] = BaseType(
+                    dim, vars[dim][:], None, vars[dim]._attributes)
 
         # add dims
         for dim in dims:
-            self.dataset[dim] = BaseType(dim, vars[dim][:],
-                    None, vars[dim]._attributes)
+            self.dataset[dim] = BaseType(
+                dim, vars[dim][:], None, vars[dim]._attributes)
 
         template.close()
 
@@ -186,14 +193,13 @@ class NetCDFAggregatorHandler(BaseHandler):
 
 
 class AggregateNetcdfData(object):
-    """
-    Aggregates variables from NetCDF files along a given axis.
 
-    """
+    """Aggregates variables from NetCDF files along a given axis."""
+
     def __init__(self, name, axis, count, dtype, shape):
         self.name = name
         self.axis = axis
-        self.count = count 
+        self.count = count
         self.dtype = dtype
         self.shape = shape
 
@@ -215,9 +221,9 @@ class AggregateNetcdfData(object):
         # concatenate along an existing axis
         else:
             # convert index to list so we can change it
-            index = list(index) 
+            index = list(index)
 
-            # get the slice along the aggregation axis and store it in a 
+            # get the slice along the aggregation axis and store it in a
             # boolean array that we'll map to the files
             slice_ = index[self.axis]
             indexes = np.zeros(self.shape[self.axis], bool)
@@ -236,22 +242,36 @@ class AggregateNetcdfData(object):
             return np.concatenate(data, axis=self.axis).astype(self.dtype)
 
     # Comparisons are passed to the data.
-    def __eq__(self, other): return self[:] == other
-    def __ne__(self, other): return self[:] != other
-    def __ge__(self, other): return self[:] >= other
-    def __le__(self, other): return self[:] <= other
-    def __gt__(self, other): return self[:] > other
-    def __lt__(self, other): return self[:] < other
+    def __eq__(self, other):
+        return self[:] == other
+
+    def __ne__(self, other):
+        return self[:] != other
+
+    def __ge__(self, other):
+        return self[:] >= other
+
+    def __le__(self, other):
+        return self[:] <= other
+
+    def __gt__(self, other):
+        return self[:] > other
+
+    def __lt__(self, other):
+        return self[:] < other
 
     # Implement the sequence and iter protocols.
-    def __len__(self): return self.shape[0]
-    def __iter__(self): return iter(self[:])    
+    def __len__(self):
+        return self.shape[0]
+
+    def __iter__(self):
+        return iter(self[:])
 
 
 def parse_values(input, size):
-    """
-    Parse fuzzy values for the aggregation axis. The input comes from
-    ConfigObj as a list of strings::
+    """Parse fuzzy values for the aggregation axis.
+
+    The input comes from ConfigObj as a list of strings::
 
         >>> print parse_values(["10", "20", "..."], 5)
         [ 10.  20.  30.  40.  50.]
@@ -259,6 +279,8 @@ def parse_values(input, size):
         [  1.     3.25   5.5    7.75  10.  ]
         >>> print parse_values(["1", "1", "2", "3", "5"], 5)
         [1 1 2 3 5]
+
+    Returns a list with the values.
 
     """
     if len(input) == size and "..." not in input:
