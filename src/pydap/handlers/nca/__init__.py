@@ -85,7 +85,7 @@ class NetCDFAggregatorHandler(BaseHandler):
         self.filepath = filepath
         self.cache = FileAttributeCache()
 
-    def parse(self, projection, selection):
+    def parse(self, projection, selection, *args, **kwargs):
         """Build aggregrated dataset.
 
         Aggregation must be done per request, since new files may be added.
@@ -189,7 +189,7 @@ class NetCDFAggregatorHandler(BaseHandler):
 
         template.close()
 
-        return BaseHandler.parse(self, projection, selection)
+        return BaseHandler.parse(self, projection, selection, *args, **kwargs)
 
 
 class AggregateNetcdfData(object):

@@ -1,0 +1,4 @@
+[dataset]
+match = sst_*.nc
+axis = TIME
+history = COADS monthly data aggregated
