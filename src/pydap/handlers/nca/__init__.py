@@ -10,6 +10,7 @@ from ast import literal_eval as eval
 
 import numpy as np
 from configobj import ConfigObj
+from pkg_resources import get_distribution
 
 from pupynere import netcdf_file
 
@@ -77,6 +78,7 @@ class NetCDFAggregatorHandler(BaseHandler):
 
     """A NetCDF 3 aggregator."""
 
+    __version__ = get_distribution("pydap.handlers.nca").version
     extensions = re.compile(r"^.*\.nca$", re.IGNORECASE)
 
     def __init__(self, filepath):
